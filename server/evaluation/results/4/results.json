@@ -1,0 +1,423 @@
+{
+  "summary": {
+    "total": 14,
+    "avg_mrr": 0.7428571428571429,
+    "avg_ndcg": 0.7612832255934405,
+    "avg_keyword_coverage": 85.71428571428571,
+    "avg_accuracy": 3.5,
+    "avg_completeness": 3.0714285714285716,
+    "avg_relevance": 3.4285714285714284,
+    "categories": {
+      "direct_fact": {
+        "count": 2,
+        "mrr": 0.8666666666666667,
+        "ndcg": 0.8479237697173418,
+        "coverage": 100,
+        "accuracy": 5,
+        "completeness": 4.5,
+        "relevance": 4
+      },
+      "comparative": {
+        "count": 2,
+        "mrr": 0.75,
+        "ndcg": 0.8154648767857288,
+        "coverage": 100,
+        "accuracy": 4.5,
+        "completeness": 4,
+        "relevance": 5
+      },
+      "temporal": {
+        "count": 2,
+        "mrr": 1,
+        "ndcg": 0.9799301972870469,
+        "coverage": 100,
+        "accuracy": 5,
+        "completeness": 4.5,
+        "relevance": 5
+      },
+      "numerical": {
+        "count": 2,
+        "mrr": 0.75,
+        "ndcg": 0.8187967394916746,
+        "coverage": 100,
+        "accuracy": 5,
+        "completeness": 4,
+        "relevance": 4
+      },
+      "relationship": {
+        "count": 2,
+        "mrr": 0.8333333333333333,
+        "ndcg": 0.875,
+        "coverage": 100,
+        "accuracy": 2,
+        "completeness": 2,
+        "relevance": 3.5
+      },
+      "holistic": {
+        "count": 2,
+        "mrr": 0.5,
+        "ndcg": 0.4918669958722923,
+        "coverage": 50,
+        "accuracy": 1,
+        "completeness": 1,
+        "relevance": 1
+      },
+      "spanning": {
+        "count": 2,
+        "mrr": 0.5,
+        "ndcg": 0.5,
+        "coverage": 50,
+        "accuracy": 2,
+        "completeness": 1.5,
+        "relevance": 1.5
+      }
+    }
+  },
+  "results": [
+    {
+      "index": 0,
+      "question": "What is the monthly cost of Homellm's Standard Tier?",
+      "category": "direct_fact",
+      "keywords": [
+        "$10,000",
+        "Standard",
+        "Homellm"
+      ],
+      "reference_answer": "Homellm's Standard Tier costs $10,000 per month for medium-sized insurers.",
+      "generated_answer": "The Standard Tier of Homellm costs $10,000 per month.",
+      "retrieval": {
+        "mrr": 0.7333333333333334,
+        "ndcg": 0.6958475394346836,
+        "keywords_found": 3,
+        "total_keywords": 3,
+        "keyword_coverage": 100
+      },
+      "answer_eval": {
+        "feedback": "The generated answer is accurate and complete in terms of the specific cost provided, but it lacks the additional context about the target audience (medium-sized insurers) given in the reference answer. The relevance is slightly compromised as it does not include the broader context.",
+        "accuracy": 5,
+        "completeness": 4,
+        "relevance": 4
+      }
+    },
+    {
+      "index": 1,
+      "question": "What is Maxine Thompson's current salary?",
+      "category": "direct_fact",
+      "keywords": [
+        "$120,000",
+        "Maxine"
+      ],
+      "reference_answer": "Maxine Thompson's current salary is $120,000.",
+      "generated_answer": "Maxine Thompson's current salary is $120,000.",
+      "retrieval": {
+        "mrr": 1,
+        "ndcg": 1,
+        "keywords_found": 2,
+        "total_keywords": 2,
+        "keyword_coverage": 100
+      },
+      "answer_eval": {
+        "feedback": "The generated answer is accurate and complete as per the reference answer. However, it lacks any additional context or information that might be relevant to the question, such as the company or industry Maxine Thompson works in. This makes it slightly less relevant.",
+        "accuracy": 5,
+        "completeness": 5,
+        "relevance": 4
+      }
+    },
+    {
+      "index": 2,
+      "question": "How much did Priya Sharma's recommendation engine increase conversion by for Marketllm?",
+      "category": "comparative",
+      "keywords": [
+        "28%",
+        "Priya",
+        "Marketllm"
+      ],
+      "reference_answer": "Priya Sharma built a recommendation engine for Marketllm that increased conversion by 28%.",
+      "generated_answer": "Priya Sharma's recommendation engine for Marketllm increased conversion by 28%.",
+      "retrieval": {
+        "mrr": 1,
+        "ndcg": 1,
+        "keywords_found": 3,
+        "total_keywords": 3,
+        "keyword_coverage": 100
+      },
+      "answer_eval": {
+        "feedback": "The generated answer is accurate and complete as per the reference answer. However, it lacks the specific mention of 'Priya Sharma' and 'Marketllm' which are crucial details from the reference answer. The answer is relevant to the question asked.",
+        "accuracy": 4,
+        "completeness": 4,
+        "relevance": 5
+      }
+    },
+    {
+      "index": 3,
+      "question": "By what percentage did David Kim reduce deployment time with CI/CD pipelines?",
+      "category": "comparative",
+      "keywords": [
+        "60%",
+        "David",
+        "Kim"
+      ],
+      "reference_answer": "David Kim implemented CI/CD pipelines that reduced deployment time by 60%.",
+      "generated_answer": "David Kim reduced deployment time by 60% with CI/CD pipelines.",
+      "retrieval": {
+        "mrr": 0.5,
+        "ndcg": 0.6309297535714575,
+        "keywords_found": 3,
+        "total_keywords": 3,
+        "keyword_coverage": 100
+      },
+      "answer_eval": {
+        "feedback": "The generated answer is accurate and complete. It matches the reference answer precisely, stating that David Kim reduced deployment time by 60% with CI/CD pipelines. However, the reference answer provides a bit more context by mentioning that Kim implemented CI/CD pipelines, which is not explicitly stated in the generated answer. This makes the reference answer slightly more comprehensive.",
+        "accuracy": 5,
+        "completeness": 4,
+        "relevance": 5
+      }
+    },
+    {
+      "index": 4,
+      "question": "When was the Evergreen Life Insurance Lifellm contract signed?",
+      "category": "temporal",
+      "keywords": [
+        "January 20, 2025",
+        "Evergreen"
+      ],
+      "reference_answer": "The Evergreen Life Insurance Lifellm contract was signed on January 20, 2025.",
+      "generated_answer": "The contract was signed on January 20, 2025.",
+      "retrieval": {
+        "mrr": 1,
+        "ndcg": 0.9598603945740938,
+        "keywords_found": 2,
+        "total_keywords": 2,
+        "keyword_coverage": 100
+      },
+      "answer_eval": {
+        "feedback": "The generated answer is accurate and complete as per the reference answer. However, it lacks the specific name of the contract (Lifellm).",
+        "accuracy": 5,
+        "completeness": 4,
+        "relevance": 5
+      }
+    },
+    {
+      "index": 5,
+      "question": "When was the GreenValley Insurance Homellm contract signed?",
+      "category": "temporal",
+      "keywords": [
+        "October 6, 2023",
+        "GreenValley"
+      ],
+      "reference_answer": "The GreenValley Insurance Homellm contract was signed on October 6, 2023.",
+      "generated_answer": "The contract date for the GreenValley Insurance Homellm contract is October 6, 2023.",
+      "retrieval": {
+        "mrr": 1,
+        "ndcg": 1,
+        "keywords_found": 2,
+        "total_keywords": 2,
+        "keyword_coverage": 100
+      },
+      "answer_eval": {
+        "feedback": "The generated answer is accurate and complete as per the reference answer. However, the date provided is in October 6, 2023, which matches the reference answer exactly. The answer is relevant and directly addresses the question asked.",
+        "accuracy": 5,
+        "completeness": 5,
+        "relevance": 5
+      }
+    },
+    {
+      "index": 6,
+      "question": "How many employees did Insurellm have at its peak in 2020?",
+      "category": "numerical",
+      "keywords": [
+        "200",
+        "2020",
+        "peak"
+      ],
+      "reference_answer": "Insurellm reached a peak of 200 employees in 2020.",
+      "generated_answer": "Insurellm had 200 employees at its peak in 2020.",
+      "retrieval": {
+        "mrr": 0.5,
+        "ndcg": 0.6375934789833492,
+        "keywords_found": 3,
+        "total_keywords": 3,
+        "keyword_coverage": 100
+      },
+      "answer_eval": {
+        "feedback": "The generated answer is accurate and complete as per the reference answer. However, the generated answer is slightly redundant since the reference answer already provided the exact number of employees (200). The generated answer could be simplified to 'Insurellm had 200 employees at its peak in 2020.'",
+        "accuracy": 5,
+        "completeness": 5,
+        "relevance": 5
+      }
+    },
+    {
+      "index": 7,
+      "question": "How many active policies does Evergreen Life Insurance currently manage?",
+      "category": "numerical",
+      "keywords": [
+        "1,400",
+        "Evergreen"
+      ],
+      "reference_answer": "Evergreen Life Insurance currently manages 1,400 active policies.",
+      "generated_answer": "Currently, Evergreen Life Insurance manages up to 1,400 active policies with the current baseline.",
+      "retrieval": {
+        "mrr": 1,
+        "ndcg": 1,
+        "keywords_found": 2,
+        "total_keywords": 2,
+        "keyword_coverage": 100
+      },
+      "answer_eval": {
+        "feedback": "The generated answer is accurate and complete regarding the number of active policies managed by Evergreen Life Insurance. However, it includes additional information (baseline) that is not requested in the question, which is not relevant. The reference answer is more concise and directly answers the question.",
+        "accuracy": 5,
+        "completeness": 3,
+        "relevance": 3
+      }
+    },
+    {
+      "index": 8,
+      "question": "Which product does Tyler Brooks work on?",
+      "category": "relationship",
+      "keywords": [
+        "Carllm",
+        "Tyler"
+      ],
+      "reference_answer": "Tyler Brooks develops backend services for the Carllm auto insurance portal.",
+      "generated_answer": "Tyler Brooks works on the Carllm auto insurance portal as a Junior Backend Developer.",
+      "retrieval": {
+        "mrr": 1,
+        "ndcg": 1,
+        "keywords_found": 2,
+        "total_keywords": 2,
+        "keyword_coverage": 100
+      },
+      "answer_eval": {
+        "feedback": "The generated answer is partially accurate but lacks key details. It mentions Tyler Brooks works on the Carllm auto insurance portal as a Junior Backend Developer, which is correct. However, the reference answer specifies that Tyler Brooks develops backend services for the Carllm auto insurance portal. The generated answer omits the specific role (Junior Backend Developer) and does not mention that he develops backend services. Therefore, the accuracy is 1 out of 5, completeness is 2 out of 5, and relevance is 3 out of 5.",
+        "accuracy": 1,
+        "completeness": 2,
+        "relevance": 3
+      }
+    },
+    {
+      "index": 9,
+      "question": "Who signed the Summit Commercial Insurance contract on behalf of Insurellm?",
+      "category": "relationship",
+      "keywords": [
+        "Michael Torres",
+        "Summit"
+      ],
+      "reference_answer": "Michael Torres, Chief Revenue Officer, signed the Summit Commercial Insurance contract on behalf of Insurellm.",
+      "generated_answer": "Michael Torres signed the Summit Commercial Insurance contract on behalf of Insurellm, Inc.",
+      "retrieval": {
+        "mrr": 0.6666666666666666,
+        "ndcg": 0.75,
+        "keywords_found": 2,
+        "total_keywords": 2,
+        "keyword_coverage": 100
+      },
+      "answer_eval": {
+        "feedback": "The generated answer is partially accurate but lacks key information. It correctly identifies Michael Torres as the signer, but does not mention his position (Chief Revenue Officer). The reference answer provides this crucial detail, which is missing in the generated answer. Therefore, the accuracy is 3 out of 5, completeness is 2 out of 5, and relevance is 4 out of 5.",
+        "accuracy": 3,
+        "completeness": 2,
+        "relevance": 4
+      }
+    },
+    {
+      "index": 10,
+      "question": "What is the total contract value of all Healthllm contracts combined?",
+      "category": "holistic",
+      "keywords": [
+        "Healthllm",
+        "contract value"
+      ],
+      "reference_answer": "The total contract value of all Healthllm contracts is $3,510,000, combining United Healthcare Alliance ($2,784,000), Harmony Health Plans ($360,000), Advanced Medical Coverage ($270,000), and WellCare Insurance Co. ($96,000).",
+      "generated_answer": "The total contract value for all Healthllm contracts combined is $2,784,000.",
+      "retrieval": {
+        "mrr": 0.5,
+        "ndcg": 0.5,
+        "keywords_found": 1,
+        "total_keywords": 2,
+        "keyword_coverage": 50
+      },
+      "answer_eval": {
+        "feedback": "The generated answer is inaccurate and incomplete. The reference answer provides the total contract value ($3,510,000) and breaks down the individual contract values, which the generated answer does not include. The generated answer only states the total value as $2,784,000, which is incorrect based on the reference answer. Therefore, the generated answer does not match the reference answer in terms of accuracy and completeness.",
+        "accuracy": 1,
+        "completeness": 1,
+        "relevance": 1
+      }
+    },
+    {
+      "index": 11,
+      "question": "Which product line has the most active contracts according to the company overview?",
+      "category": "holistic",
+      "keywords": [
+        "contracts",
+        "products"
+      ],
+      "reference_answer": "According to the company overview, both Bizllm and Claimllm are tied with the most active contracts at 7 contracts each.",
+      "generated_answer": "The product line with the most active contracts according to the company overview is Health Insurance (Healthllm) with 6 contracts.",
+      "retrieval": {
+        "mrr": 0.5,
+        "ndcg": 0.48373399174458465,
+        "keywords_found": 1,
+        "total_keywords": 2,
+        "keyword_coverage": 50
+      },
+      "answer_eval": {
+        "feedback": "The generated answer is inaccurate and incomplete. The reference answer states that both Bizllm and Claimllm have the most active contracts at 7 each, not Healthllm with 6. The generated answer only mentions Healthllm and its 6 contracts, omitting the information about Bizllm and Claimllm. Therefore, the generated answer does not match the reference answer in terms of accuracy and completeness.",
+        "accuracy": 1,
+        "completeness": 1,
+        "relevance": 1
+      }
+    },
+    {
+      "index": 12,
+      "question": "What product does the IIOTY award winner work on?",
+      "category": "spanning",
+      "keywords": [
+        "Maxine",
+        "Thompson",
+        "Senior Data Engineer",
+        "IIOTY"
+      ],
+      "reference_answer": "Maxine Thompson, who won the IIOTY award in 2023, works as a Senior Data Engineer.",
+      "generated_answer": "I don't have enough information to determine which product the IIOTY award winner works on based on the provided context.",
+      "retrieval": {
+        "mrr": 0,
+        "ndcg": 0,
+        "keywords_found": 0,
+        "total_keywords": 4,
+        "keyword_coverage": 0
+      },
+      "answer_eval": {
+        "feedback": {
+          "Accuracy": 1,
+          "Completeness": 1,
+          "Relevance": 1
+        }
+      }
+    },
+    {
+      "index": 13,
+      "question": "What is the salary of the CTO who joined in January 2017?",
+      "category": "spanning",
+      "keywords": [
+        "James",
+        "Wilson",
+        "$285,000",
+        "January 2017"
+      ],
+      "reference_answer": "James Wilson, who joined as CTO in January 2017, has a current salary of $285,000.",
+      "generated_answer": "The CTO who joined in January 2017 has a current salary of $285,000.",
+      "retrieval": {
+        "mrr": 1,
+        "ndcg": 1,
+        "keywords_found": 4,
+        "total_keywords": 4,
+        "keyword_coverage": 100
+      },
+      "answer_eval": {
+        "feedback": "The generated answer is accurate and complete as per the reference answer. However, it lacks the name of the CTO, which is a key piece of information. The relevance is also slightly off as it does not mention the name of the CTO.",
+        "accuracy": 4,
+        "completeness": 3,
+        "relevance": 3
+      }
+    }
+  ]
+}
