@@ -55,7 +55,7 @@ A full-stack JavaScript application for chatting with a local Llama LLM through 
 
 ## How the Three Modes Behave (Backend Deep Dive + Sample Questions)
 - üß† **Basic Chat**  
-  - Handler: `llamaService.generateResponse` (single pass, no tools or KB).  
+  - Handler: `chatService.generateResponse` (single pass, no tools or KB).  
   - Good for: trivia and utility (‚ÄúWhat is the capital of France?‚Äù, ‚ÄúWhat‚Äôs today‚Äôs date?‚Äù, ‚ÄúSummarize CRUD in one line.‚Äù).  
   - Data touchpoints: none beyond chat history; cheapest/simplest path.
 
@@ -271,3 +271,25 @@ sqlite3 server/data/chat.db
 
 ## üìÑ License
 MIT
+
+## Three Modes ó Scope ï Questions ï Mechanics (Clean View)
+### ?? Basic Chat (no tools/KB)
+- Scope: plain model reply; no database or document lookup.
+- Sample questions: ìCapital of France?î, ìWhatís todayís date?î, ìSummarize CRUD in one line.î
+- Mechanics: single-pass `chatService.generateResponse`; only chat history involved.
+
+### ??? Tool-Based Chat (SQLite orders)
+- Scope: seeded SQLite tables `users`, `products`, `orders`, `order_items` in `server/src/db/database.js`.
+- Sample questions: status (ìorder 102î), contents (ìitems in order 205î), user history (ìorders for Aliceî), actions (ìcancel order 310î), filters (ìdelivered orders for Bobî).
+- Mechanics: `llamaService.generateResponse` with JSON tool calls (up to 5 loops); executes SQL tools then returns a friendly summary.
+
+### ?? Modified RAG Chat (KB docs)
+- Scope: Markdown KB in `server/src/data/knowledge-base/` vectorized into MongoDB `ol_chunks`.
+- Sample questions: ìWho won the IIOTY award in 2023?î, ìMonthly cost of Homellm Standard Tier?î, ìTotal contract value for Healthllm,î ìHow many employees did Insurellm have in 2020?î
+- Mechanics: `modifiedRAGService.generateResponse`; hybrid retrieval (vector + keyword), optional rewrite/expand/rerank; strict, concise, grounded answers.
+
+## Notes & Prereqs
+- UI navigation lives in `client/src/components/lessons.js` (routes) and `App.jsx` (router); use the menu to switch modes.
+- Model choice is set in `server/.env` via `MODEL_NAME` (default `qwen2.5:3b`); change with `ollama pull <model>` then update `.env`.
+- RAG modes require MongoDB running; Basic and Tool-Based modes work without Mongo.
+- Tool-Based Chat answers only from the seeded SQLite data (users/products/orders/order_items). RAG answers only from the markdown KB. Basic Chat is ungrounded.
