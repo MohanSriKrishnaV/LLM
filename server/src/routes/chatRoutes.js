@@ -149,7 +149,7 @@ router.post('/chatLang', async (req, res) => {
       return res.status(400).json({ error: 'Invalid message' })
     }
 
-    const result = await LangService.generateResponse(
+    const result = await llamaService.generateResponse(
       message,
       systemPrompt,
       options

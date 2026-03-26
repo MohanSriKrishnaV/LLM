@@ -41,7 +41,7 @@ export const ToolingLLM = () => {
 
     try {
       const options = { temperature, maxTokens, topP }
-      const response = await chatAPI.sendMessage(input, systemPrompt, options)
+      const response = await chatAPI.sendMessageLang(input, systemPrompt, options)
       const assistantMessage = {
         role: 'assistant',
         content: response.message,
