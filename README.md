@@ -32,6 +32,10 @@ A full-stack JavaScript application for chatting with a local Llama LLM through 
 - 🧠 **Basic Chat** (`/basic-llm` in UI menu) → `/api/chat`  
   - Best for: open-ended Q&A, brainstorming, short answers without retrieval.  
   - Flow: single Ollama (Qwen 2.5:3B) turn; no tools, no vector search.
+
+  ![Tool-based chat screen](docs/img/basic-llm-1.png)
+
+
 - 🛠️ **Tool-Based Chat** (`/tooling-llm` in UI menu) → `/api/chat`  
   - Best for: order lookups, cancellations, item/status queries stored in SQLite.  
   - Flow: LLM emits JSON tool calls; `llamaService` runs order tools against `server/src/db/database.js` (orders/users/products tables) and loops up to 5 times to return a final summary.

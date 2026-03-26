@@ -12,7 +12,7 @@ const api = axios.create({
 export const chatAPI = {
   sendMessage: async (message, systemPrompt, options) => {
     try {
-      const response = await api.post('/chat', { message, systemPrompt, options })
+      const response = await api.post('/chatBasic', { message, systemPrompt, options })
       return response.data
     } catch (error) {
       console.error('Error sending message:', error)
