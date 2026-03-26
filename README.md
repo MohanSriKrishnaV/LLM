@@ -44,8 +44,8 @@ A full-stack JavaScript application for chatting with a local Llama LLM through 
 - Evaluations run over a provided `.jsonl` file containing question/answer pairs.
 - Reported metrics include accuracy, mean reciprocal rank (MRR), and related retrieval scores.
 
-- ## Feature Highlights
-- 🗂️ **Conversation history** persisted in SQLite (`server/data/chat.db`) with clear/restore endpoints; answers stored here cover whatever the user asked (from quick brainstorming to tool/RAG replies) and can be replayed via `/api/chat/history`.
+## Feature Highlights
+- 🗂️ **Conversation history** persisted in SQLite (`server/data/chat.db`) with clear/restore endpoints; contains all chat types (basic/tool/RAG) and is retrievable via `/api/chat/history`.
 - 🧰 **Tool-aware prompts** in `ToolingLLM.jsx` that detect tool JSON and hit SQLite order tools.
 - 🧮 **Multiple model pathways**: core Ollama chat plus Mongo-backed RAG (Modified) for grounded answers.
 - 🧭 **Vector search**: MongoDB vector store (chunks from `server/src/data/knowledge-base/`) powers RAG retrieval.
@@ -53,23 +53,23 @@ A full-stack JavaScript application for chatting with a local Llama LLM through 
 - 📝 **Sample datasets**: `server/evaluation/tests.jsonl` (and variants) contain question/answer/keyword triples used for grading.
 - 🎛️ **Menu-driven UI** (`client/src/components/MenuBar.jsx` + `lessons.js`) so users can switch among chat modes from the same frontend.
 
-## How the Three Modes Behave (Backend Deep Dive)
+## How the Three Modes Behave (Backend Deep Dive + Sample Questions)
 - 🧠 **Basic Chat**  
-  - Handler: `llamaService.generateResponse` (single pass, no tools enabled in this path).  
-  - Question fit: generic chit-chat, short form explanations, creative prompts.  
+  - Handler: `llamaService.generateResponse` (single pass, no tools or KB).  
+  - Good for: trivia and utility (“What is the capital of France?”, “What’s today’s date?”, “Summarize CRUD in one line.”).  
   - Data touchpoints: none beyond chat history; cheapest/simplest path.
 
 - 🛠️ **Tool-Based Chat**  
   - Handler: `llamaService.generateResponse` with tool-calling loop (max 5).  
-  - Tools (SQLite via `server/src/db/database.js`): `getOrderStatus`, `getOrderItems`, `getOrderDetails`, `searchOrders`, `getUserIdByName`, cancel/update helpers.  
-  - Question fit: order status, item lists, user order history, cancellations, filtered searches (by user, status, orderId).  
-  - Flow: model emits JSON call → tool runs on SQLite tables → result fed back → final friendly answer.
+  - Data scope: seeded SQLite tables (`users`, `products`, `orders`, `order_items`) via `server/src/db/database.js`.  
+  - Good for: “What’s the status of order 102?”, “List items in order 205,” “Show all orders for user Alice,” “Cancel order 310,” “Find delivered orders for Bob.”  
+  - Flow: model emits JSON call → tool runs on SQLite → result fed back → final friendly answer.
 
-- 🧭 ** RAG Chat**  
+- 🧭 **Modified RAG Chat**  
   - Handler: `modifiedRAGService.generateResponse`.  
-  - Corpus: Markdown docs in `server/src/data/knowledge-base/` chunked & embedded into MongoDB (collection `ol_chunks`).  
-  - Retrieval: hybrid (vector + keyword boost), optional rewrite/expand/rerank flags; strict system prompt for grounded answers and numeric rollups.  
-  - Question fit: policy/product/employee/contract facts, “how many/total/sum/combined” aggregations, timeline and relationship questions that must cite document-grounded facts.
+  - Corpus: Markdown docs in `server/src/data/knowledge-base/` chunked & embedded into MongoDB (`ol_chunks`).  
+  - Good for: “Who won the IIOTY award in 2023?”, “Monthly cost of Homellm Standard Tier?”, “Total contract value for Healthllm,” “How many employees did Insurellm have in 2020?”  
+  - Retrieval: hybrid (vector + keyword boost), optional rewrite/expand/rerank; strict prompt for grounded numeric/relational answers.
 
 ## 🚀 Quick Start
 
@@ -171,17 +171,8 @@ Response:
 }
 ```
 
-### POST /chatHF
-Hugging Face backend (alternate model path).
 
-### POST /chatRAG
-Baseline retrieval-augmented answers over local knowledge base (Mongo vectors).
 
-### POST /chatLang
-LangChain RAG pipeline (Mongo vectors, MiniLM embeddings).
-
-### POST /chatImpLang
-Improved RAG with hybrid scoring, optional rewrite/expand/rerank.
 
 ### POST /chatModRAG
 Modified RAG with strict grounded answering and hybrid retrieval.
