@@ -35,9 +35,16 @@ A full-stack JavaScript application for chatting with a local Llama LLM through 
 - ğŸ› ï¸ **Tool-Based Chat** (`/tooling-llm` in UI menu) â†’ `/api/chat`  
   - Best for: order lookups, cancellations, item/status queries stored in SQLite.  
   - Flow: LLM emits JSON tool calls; `llamaService` runs order tools against `server/src/db/database.js` (orders/users/products tables) and loops up to 5 times to return a final summary.
+
+![Tool-based chat screen](docs/img/tool-based-llm-1.png)
+
+
 - ğŸ§­ **Modified RAG Chat** (`/ModifiedRAG` in UI menu) â†’ `/api/chatModRAG`  
   - Best for: fact-finding over provided documents (company/products/contracts) stored under `server/src/data/knowledge-base/` (Mongo vector store).  
   - Flow: hybrid retrieval (vector + keyword) with optional rewrite/expand/rerank, strict system prompt for grounded, calculation-friendly answers.
+
+  ![RAG-based chat screen](docs/img/rag-based-llm-1.png)
+
 
 ## Evaluation & QA
 - Scripts are included to automatically check answer correctness against reference data.
@@ -272,20 +279,20 @@ sqlite3 server/data/chat.db
 ## ğŸ“„ License
 MIT
 
-## Three Modes — Scope • Questions • Mechanics (Clean View)
+## Three Modes ï¿½ Scope ï¿½ Questions ï¿½ Mechanics (Clean View)
 ### ?? Basic Chat (no tools/KB)
 - Scope: plain model reply; no database or document lookup.
-- Sample questions: “Capital of France?”, “What’s today’s date?”, “Summarize CRUD in one line.”
+- Sample questions: ï¿½Capital of France?ï¿½, ï¿½Whatï¿½s todayï¿½s date?ï¿½, ï¿½Summarize CRUD in one line.ï¿½
 - Mechanics: single-pass `chatService.generateResponse`; only chat history involved.
 
 ### ??? Tool-Based Chat (SQLite orders)
 - Scope: seeded SQLite tables `users`, `products`, `orders`, `order_items` in `server/src/db/database.js`.
-- Sample questions: status (“order 102”), contents (“items in order 205”), user history (“orders for Alice”), actions (“cancel order 310”), filters (“delivered orders for Bob”).
+- Sample questions: status (ï¿½order 102ï¿½), contents (ï¿½items in order 205ï¿½), user history (ï¿½orders for Aliceï¿½), actions (ï¿½cancel order 310ï¿½), filters (ï¿½delivered orders for Bobï¿½).
 - Mechanics: `llamaService.generateResponse` with JSON tool calls (up to 5 loops); executes SQL tools then returns a friendly summary.
 
 ### ?? Modified RAG Chat (KB docs)
 - Scope: Markdown KB in `server/src/data/knowledge-base/` vectorized into MongoDB `ol_chunks`.
-- Sample questions: “Who won the IIOTY award in 2023?”, “Monthly cost of Homellm Standard Tier?”, “Total contract value for Healthllm,” “How many employees did Insurellm have in 2020?”
+- Sample questions: ï¿½Who won the IIOTY award in 2023?ï¿½, ï¿½Monthly cost of Homellm Standard Tier?ï¿½, ï¿½Total contract value for Healthllm,ï¿½ ï¿½How many employees did Insurellm have in 2020?ï¿½
 - Mechanics: `modifiedRAGService.generateResponse`; hybrid retrieval (vector + keyword), optional rewrite/expand/rerank; strict, concise, grounded answers.
 
 ## Notes & Prereqs
