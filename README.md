@@ -16,15 +16,60 @@ A full-stack JavaScript application for chatting with a local Llama LLM through 
 - Integration with Ollama for LLM inference
 - CORS enabled for client communication
 
-### Database (SQLite)
+### Database (SQLite + MongoDB)
 - Stores chat messages
 - Tracks user and assistant responses
 - Lightweight and file-based
+- MongoDB was vectorized for embeddings/vector search
 
 ### LLM (Ollama)
 - Local Llama model inference
 - Configurable model selection
 - No API keys needed
+- Mentioned model: Qwen 2.5:3B
+
+## Chat Experiences (Front-End → Backend)
+- 🧠 **Basic Chat** (`/basic-llm` in UI menu) → `/api/chat`  
+  - Best for: open-ended Q&A, brainstorming, short answers without retrieval.  
+  - Flow: single Ollama (Qwen 2.5:3B) turn; no tools, no vector search.
+- 🛠️ **Tool-Based Chat** (`/tooling-llm` in UI menu) → `/api/chat`  
+  - Best for: order lookups, cancellations, item/status queries stored in SQLite.  
+  - Flow: LLM emits JSON tool calls; `llamaService` runs order tools against `server/src/db/database.js` (orders/users/products tables) and loops up to 5 times to return a final summary.
+- 🧭 **Modified RAG Chat** (`/ModifiedRAG` in UI menu) → `/api/chatModRAG`  
+  - Best for: fact-finding over provided documents (company/products/contracts) stored under `server/src/data/knowledge-base/` (Mongo vector store).  
+  - Flow: hybrid retrieval (vector + keyword) with optional rewrite/expand/rerank, strict system prompt for grounded, calculation-friendly answers.
+
+## Evaluation & QA
+- Scripts are included to automatically check answer correctness against reference data.
+- Evaluations run over a provided `.jsonl` file containing question/answer pairs.
+- Reported metrics include accuracy, mean reciprocal rank (MRR), and related retrieval scores.
+
+- ## Feature Highlights
+- 🗂️ **Conversation history** persisted in SQLite (`server/data/chat.db`) with clear/restore endpoints; answers stored here cover whatever the user asked (from quick brainstorming to tool/RAG replies) and can be replayed via `/api/chat/history`.
+- 🧰 **Tool-aware prompts** in `ToolingLLM.jsx` that detect tool JSON and hit SQLite order tools.
+- 🧮 **Multiple model pathways**: core Ollama chat plus Mongo-backed RAG (Modified) for grounded answers.
+- 🧭 **Vector search**: MongoDB vector store (chunks from `server/src/data/knowledge-base/`) powers RAG retrieval.
+- 📊 **Evaluator scripts** in `server/evaluation/` run against `.jsonl` datasets and emit HTML/JSON reports (accuracy, MRR, nDCG, keyword coverage).
+- 📝 **Sample datasets**: `server/evaluation/tests.jsonl` (and variants) contain question/answer/keyword triples used for grading.
+- 🎛️ **Menu-driven UI** (`client/src/components/MenuBar.jsx` + `lessons.js`) so users can switch among chat modes from the same frontend.
+
+## How the Three Modes Behave (Backend Deep Dive)
+- 🧠 **Basic Chat**  
+  - Handler: `llamaService.generateResponse` (single pass, no tools enabled in this path).  
+  - Question fit: generic chit-chat, short form explanations, creative prompts.  
+  - Data touchpoints: none beyond chat history; cheapest/simplest path.
+
+- 🛠️ **Tool-Based Chat**  
+  - Handler: `llamaService.generateResponse` with tool-calling loop (max 5).  
+  - Tools (SQLite via `server/src/db/database.js`): `getOrderStatus`, `getOrderItems`, `getOrderDetails`, `searchOrders`, `getUserIdByName`, cancel/update helpers.  
+  - Question fit: order status, item lists, user order history, cancellations, filtered searches (by user, status, orderId).  
+  - Flow: model emits JSON call → tool runs on SQLite tables → result fed back → final friendly answer.
+
+- 🧭 ** RAG Chat**  
+  - Handler: `modifiedRAGService.generateResponse`.  
+  - Corpus: Markdown docs in `server/src/data/knowledge-base/` chunked & embedded into MongoDB (collection `ol_chunks`).  
+  - Retrieval: hybrid (vector + keyword boost), optional rewrite/expand/rerank flags; strict system prompt for grounded answers and numeric rollups.  
+  - Question fit: policy/product/employee/contract facts, “how many/total/sum/combined” aggregations, timeline and relationship questions that must cite document-grounded facts.
 
 ## 🚀 Quick Start
 
@@ -111,16 +156,41 @@ js/
 Send a message to the Llama model
 ```json
 {
-  "message": "What is the capital of France?"
+  "message": "Give three bullet points on how vector search works in MongoDB."
 }
 ```
 
 Response:
 ```json
 {
-  "message": "The capital of France is Paris."
+  "message": [
+    "Store embeddings for documents in a vector field.",
+    "Use a vector index to find nearest neighbors to the query embedding.",
+    "Return the top-k documents scored by cosine similarity or dot product."
+  ]
 }
 ```
+
+### POST /chatHF
+Hugging Face backend (alternate model path).
+
+### POST /chatRAG
+Baseline retrieval-augmented answers over local knowledge base (Mongo vectors).
+
+### POST /chatLang
+LangChain RAG pipeline (Mongo vectors, MiniLM embeddings).
+
+### POST /chatImpLang
+Improved RAG with hybrid scoring, optional rewrite/expand/rerank.
+
+### POST /chatModRAG
+Modified RAG with strict grounded answering and hybrid retrieval.
+
+### GET /chat/history
+Fetch stored conversation history from SQLite.
+
+### DELETE /chat/history
+Clear stored conversation history.
 
 ### GET /chat/history
 Retrieve all previous messages

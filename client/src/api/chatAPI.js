@@ -83,7 +83,7 @@ export const chatAPI = {
 ,
    sendMessageImpRAGLang: async (message, systemPrompt, options) => {
     try {
-      const response = await api.post('/chatImpRAGLang', { message, systemPrompt, options })
+      const response = await api.post('/chatModRAG', { message, systemPrompt, options })
       return response.data
     } catch (error) {
       console.error('Error sending message:', error)

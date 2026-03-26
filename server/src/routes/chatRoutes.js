@@ -167,7 +167,7 @@ router.post('/chatImpLang', async (req, res) => {
 })
 
 
-router.post('/chatImpRAGLang', async (req, res) => {
+router.post('/chatModRAG', async (req, res) => {
   try {
         // await ImpRAGService.loadBase();
     const { message, systemPrompt, options } = req.body

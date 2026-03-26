@@ -34,3 +34,11 @@ why to try to now to do query re writingn in better eau also called query expans
 in impragservice some vhnages fucked up my mmr , cngdc , indly tell what can i 
 
 
+
+
+# Add BM25 instead of keywordScore (huge boost)
+Answer validation layer (keyword match auto scoring)
+
+Self-correction pass (cheap 2nd LLM call)
+
+Extractive QA head (no hallucination at all)

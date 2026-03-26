@@ -7,7 +7,11 @@ import fs from "fs";
 import { loadTests } from "./test.js";
 
 import { LangService } from "../src/services/LangService.js";
-import { ImpRAGService } from "../src/services/ImpRAGService.js";
+import { modifiedRAGService } from "../src/services/modifiedRAGService.js";
+import { connectMongo } from "../src/db/mongoClient.js";
+
+// import {modifiedRAGService} from "../src/services/modifiedRAGService.js";
+
 
 const MODEL = process.env.MODEL_NAME || "qwen2.5:3b";
 const JUDGE_MODEL = process.env.JUDGE_MODEL || MODEL;
@@ -63,11 +67,16 @@ function calculateNDCG(keyword, retrievedDocs, k = 10) {
 }
 
 async function fetchContext(question, topK = 10) {
-  if (typeof ImpRAGService.loadBase === "function") {
-    await ImpRAGService.loadBase();
+  // Ensure DB connection for modifiedRAGService
+  await connectMongo().catch((err) => {
+    console.error("Mongo connect failed:", err.message || err);
+  });
+
+  if (typeof modifiedRAGService.loadBase === "function") {
+    await modifiedRAGService.loadBase();
   }
   // Use LangService retrieval; keeps behavior close to runtime system.
-  const { contextUsed = [] } = await ImpRAGService.generateResponse(
+  const { contextUsed = [] } = await modifiedRAGService.generateResponse(
     question,
     undefined,
     { topK, maxTokens: 1, temperature: 0.0 },
@@ -76,7 +85,12 @@ async function fetchContext(question, topK = 10) {
 }
 
 async function answerQuestion(question) {
-  const { message, contextUsed = [] } = await ImpRAGService.generateResponse(
+  // Ensure DB connection for modifiedRAGService
+  await connectMongo().catch((err) => {
+    console.error("Mongo connect failed:", err.message || err);
+  });
+
+  const { message, contextUsed = [] } = await modifiedRAGService.generateResponse(
     question,
     undefined,
     { temperature: 0.0, topK: 5 },
@@ -121,7 +135,7 @@ async function evaluateAnswer(test) {
     {
       role: "system",
       content:
-        "You are an expert evaluator assessing the quality of answers  and are very strict. Compare the generated answer to the reference answer and only give 5/5 for perfect answers. Reply in JSON with keys: feedback, accuracy, completeness, relevance.",
+        "You are an expert evaluator assessing the quality of answers . Compare the generated answer to the reference answer and only give 5/5 for perfect answers. Reply in JSON with keys: feedback, accuracy, completeness, relevance.Do grade properly if the answers do match the context properly",
     },
     {
       role: "user",
@@ -366,10 +380,12 @@ function buildResultsHtml(results, summary) {
     h1 { margin-top: 0; }
     .chart-row { display: flex; flex-wrap: wrap; gap: 24px; }
     canvas { max-width: 520px; }
-    table { border-collapse: collapse; width: 100%; margin-top: 24px; }
-    th, td { border: 1px solid #ddd; padding: 6px 8px; font-size: 12px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 24px; table-layout: fixed; }
+    th, td { border: 1px solid #ddd; padding: 6px 8px; font-size: 12px; vertical-align: top; white-space: pre-wrap; word-break: break-word; }
     th { background: #f5f5f5; }
     tr:nth-child(every) { background: #fafafa; }
+    .narrow { width: 70px; }
+    .wide { width: 260px; }
   </style>
 </head>
 <body>
@@ -403,6 +419,9 @@ function buildResultsHtml(results, summary) {
         <th>#</th>
         <th>Category</th>
         <th>Question</th>
+        <th class="wide">LLM Answer</th>
+        <th class="wide">Expected Answer</th>
+        <th class="wide">Feedback</th>
         <th>MRR</th>
         <th>nDCG</th>
         <th>Keywords Found</th>
@@ -424,6 +443,11 @@ function buildResultsHtml(results, summary) {
     const relevance = results.map(r => Number(r.answer_eval.relevance || 0));
     const mrr = results.map(r => Number(r.retrieval.mrr || 0));
     const ndcg = results.map(r => Number(r.retrieval.ndcg || 0));
+
+    const escapeHtml = (value) => String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
 
     new Chart(document.getElementById('answerChart'), {
       type: 'bar',
@@ -456,7 +480,10 @@ function buildResultsHtml(results, summary) {
       tr.innerHTML = [
         r.index,
         r.category,
-        r.question,
+        escapeHtml(r.question),
+        escapeHtml(r.generated_answer),
+        escapeHtml(r.reference_answer),
+        escapeHtml(r.answer_eval.feedback),
         (r.retrieval.mrr ?? 0).toFixed(3),
         (r.retrieval.ndcg ?? 0).toFixed(3),
         \`\${r.retrieval.keywords_found ?? 0}\`,

@@ -7,6 +7,7 @@ const __dirname = path.dirname(__filename);
 
 // const DEFAULT_TEST_FILE = path.join(__dirname, "tests.jsonl");
 const DEFAULT_TEST_FILE = path.join(__dirname, "test.jsonl");
+// const DEFAULT_TEST_FILE = path.join(__dirname, "tester.jsonl");
 
 
 
