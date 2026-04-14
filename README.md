@@ -364,8 +364,3 @@ MIT
   * Basic Chat → ungrounded (no external data)
 
 ---
-
-If you want, I can also:
-
-* make this more **GitHub-polished (badges, TOC, screenshots)**
-* or convert it into a **top-tier README (FAANG-level project presentation)** 🚀
