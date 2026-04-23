@@ -311,27 +311,87 @@ sqlite3 server/data/chat.db
 - CORS enabled
 - Axios for Ollama communication
 
+Here’s your **cleaned and properly formatted README section** with broken symbols fixed and consistent markdown:
+
+---
+
 ## 📄 License
+
 MIT
 
-## Three Modes � Scope � Questions � Mechanics (Clean View)
-### ?? Basic Chat (no tools/KB)
-- Scope: plain model reply; no database or document lookup.
-- Sample questions: �Capital of France?�, �What�s today�s date?�, �Summarize CRUD in one line.�
-- Mechanics: single-pass `chatService.generateResponse`; only chat history involved.
+---
 
-### ??? Tool-Based Chat (SQLite orders)
-- Scope: seeded SQLite tables `users`, `products`, `orders`, `order_items` in `server/src/db/database.js`.
-- Sample questions: status (�order 102�), contents (�items in order 205�), user history (�orders for Alice�), actions (�cancel order 310�), filters (�delivered orders for Bob�).
-- Mechanics: `llamaService.generateResponse` with JSON tool calls (up to 5 loops); executes SQL tools then returns a friendly summary.
+## Three Modes — Scope • Questions • Mechanics (Clean View)
 
-### ?? Modified RAG Chat (KB docs)
-- Scope: Markdown KB in `server/src/data/knowledge-base/` vectorized into MongoDB `ol_chunks`.
-- Sample questions: �Who won the IIOTY award in 2023?�, �Monthly cost of Homellm Standard Tier?�, �Total contract value for Healthllm,� �How many employees did Insurellm have in 2020?�
-- Mechanics: `modifiedRAGService.generateResponse`; hybrid retrieval (vector + keyword), optional rewrite/expand/rerank; strict, concise, grounded answers.
+### 🔹 Basic Chat (no tools / KB)
 
-## Notes & Prereqs
-- UI navigation lives in `client/src/components/lessons.js` (routes) and `App.jsx` (router); use the menu to switch modes.
-- Model choice is set in `server/.env` via `MODEL_NAME` (default `qwen2.5:3b`); change with `ollama pull <model>` then update `.env`.
-- RAG modes require MongoDB running; Basic and Tool-Based modes work without Mongo.
-- Tool-Based Chat answers only from the seeded SQLite data (users/products/orders/order_items). RAG answers only from the markdown KB. Basic Chat is ungrounded.
+* **Scope:** Plain model reply; no database or document lookup.
+* **Sample questions:**
+
+  * “Capital of France?”
+  * “What’s today’s date?”
+  * “Summarize CRUD in one line.”
+* **Mechanics:** Single-pass `chatService.generateResponse`; only chat history involved.
+
+---
+
+### 🔹 Tool-Based Chat (SQLite orders)
+
+* **Scope:** Seeded SQLite tables: `users`, `products`, `orders`, `order_items` in `server/src/db/database.js`.
+* **Sample questions:**
+
+  * Status → “order 102”
+  * Contents → “items in order 205”
+  * User history → “orders for Alice”
+  * Actions → “cancel order 310”
+  * Filters → “delivered orders for Bob”
+* **Mechanics:**
+  `llamaService.generateResponse` with JSON tool calls (up to 5 loops); executes SQL tools and returns a friendly summary.
+
+---
+
+### 🔹 Modified RAG Chat (KB docs)
+
+* **Scope:** Markdown KB in `server/src/data/knowledge-base/` vectorized into MongoDB collection `ol_chunks`.
+* **Sample questions:**
+
+  * “Who won the IIOTY award in 2023?”
+  * “Monthly cost of Homellm Standard Tier?”
+  * “Total contract value for Healthllm?”
+  * “How many employees did Insurellm have in 2020?”
+* **Mechanics:**
+  `modifiedRAGService.generateResponse`; hybrid retrieval (vector + keyword), optional rewrite/expand/rerank; strict, concise, grounded answers.
+
+---
+
+## 📌 Notes & Prerequisites
+
+* UI navigation:
+
+  * `client/src/components/lessons.js` (routes)
+  * `App.jsx` (router)
+    Use the menu to switch modes.
+
+* Model configuration:
+
+  * Set in `server/.env` via `MODEL_NAME` (default: `qwen2.5:3b`)
+  * Change using:
+
+    ```bash
+    ollama pull <model>
+    ```
+
+    then update `.env`
+
+* MongoDB requirement:
+
+  * Required for RAG modes
+  * Not needed for Basic or Tool-Based Chat
+
+* Data boundaries:
+
+  * Tool-Based Chat → only SQLite data (`users`, `products`, `orders`, `order_items`)
+  * RAG Chat → only Markdown KB
+  * Basic Chat → ungrounded (no external data)
+
+---
