@@ -6,7 +6,6 @@ import { RagService } from '../services/RagService.js'
 import { LangService } from '../services/LangService.js'
 import { ImpRAGService } from '../services/ImpRAGService.js'
 import { modifiedRAGService } from '../services/ModifiedRAGService.js'
-import { basicLlamaService } from '../services/basicLlamaService.js'
 
 
 const router = express.Router()
@@ -32,31 +31,6 @@ router.post('/chat', async (req, res) => {
   } catch (error) {
     console.error('Error in chat endpoint:', error)
 
-    res.status(500).json({
-      error: error.message || 'Internal server error'
-    })
-  }
-})
-
-router.post('/chatBasic', async (req, res) => {
-  try {
-    const { message, systemPrompt, options } = req.body
-
-    if (!message || typeof message !== 'string') {
-      return res.status(400).json({ error: 'Invalid message' })
-    }
-
-    const convo = await chatService.getHistory()
-    const result = await basicLlamaService.generateResponse(
-      message,
-      convo,
-      systemPrompt,
-      options
-    )
-
-    res.json(result)
-  } catch (error) {
-    console.error('Error in chatBasic endpoint:', error)
     res.status(500).json({
       error: error.message || 'Internal server error'
     })
@@ -149,7 +123,7 @@ router.post('/chatLang', async (req, res) => {
       return res.status(400).json({ error: 'Invalid message' })
     }
 
-    const result = await llamaService.generateResponse(
+    const result = await LangService.generateResponse(
       message,
       systemPrompt,
       options
@@ -193,7 +167,7 @@ router.post('/chatImpLang', async (req, res) => {
 })
 
 
-router.post('/chatModRAG', async (req, res) => {
+router.post('/chatImpRAGLang', async (req, res) => {
   try {
         // await ImpRAGService.loadBase();
     const { message, systemPrompt, options } = req.body

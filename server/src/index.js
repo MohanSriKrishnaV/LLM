@@ -4,7 +4,6 @@ import chatRoutes from './routes/chatRoutes.js'
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
-
 import { connectMongo } from './db/mongoClient.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

@@ -1,158 +1,34 @@
 import axios from "axios";
+import fs from "fs/promises";
+import path from "path";
+import { fileURLToPath } from "url";
+import { Document } from "@langchain/core/documents";
+import { pipeline } from "@xenova/transformers";
 import { connectMongo, getMongoDb } from "../db/mongoClient.js";
 import { chatService } from "./chatService.js";
-import { pipeline } from "@xenova/transformers";
+import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 
 const OLLAMA_API_URL = process.env.OLLAMA_API_URL || "http://localhost:11434";
 const MODEL_NAME = process.env.MODEL_NAME || "qwen2.5:3b";
 const OL_COLLECTION = process.env.OL_COLLECTION || "ol_chunks";
-const DB_NAME = process.env.MONGODB_DB || "LLM";
-const EMBED_MODEL = process.env.EMBED_MODEL || "Xenova/all-MiniLM-L6-v2";
+const EMBED_MODEL = process.env.EMBED_MODEL || "Xenova/all-MiniLM-L6-v2"; // local, no API key
+
+const DEFAULT_SYSTEM_PROMPT = [
+  "You represent an insurance company.",
+  "Answer questions about employees and products using the retrieved context.",
+  "Answer the user's question naturally and conversationally.",
+  "Use the provided context only as background knowledge.",
+  "Keep answers brief; if unsure, say you don't know.",
+  "Do NOT mention the context or say anything like based on the context and the information provided such as based on the context proivded or based on the information provided",
+  "Just give a clean, human-like readable answer.",
+].join(" ");
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const OL_ROOT = path.resolve(__dirname, "../data/knowledge-base");
+
 let baseLoaded = false;
-
 let embedderPromise;
-
-/* ================= EMBEDDING ================= */
-
-// - Do NOT mix information from different chunks unless the query needs information from different chunks.
-// - If multiple people are mentioned, choose the one directly tied to the question.
-
-// answered nos directly
-// const SYSTEM_PROMPT=`
-// You are a helpful AI assistant.
-//  Use ONLY the most relevant context chunk.
-//  - Identify ALL relevant entries.
-// - Be precise.
-// use the context when u feel that the answer of the context lies in the context or else answer directly
-// - If the answer is clearly in the context, respond concisely.
-// - If the answer is NOT in the context, say: "I don't know".
-// - Do NOT make up information.
-// - Do NOT use outside knowledge.
-// - Keep answers short and clear (max 3-4 sentences).
-// `;
-
-// answering propelry but added extra info
-// const SYSTEM_PROMPT = `
-// You are a  question-answering assistant using retrieved context.
-
-// RULES:
-
-// 1. Use  the suitable provided context to answer.
-// 2. Do NOT use outside knowledge.
-// 3. Do NOT guess or assume missing information.
-
-// UNDERSTANDING THE TASK:
-
-// - If the answer is directl fact stated → answer it clearly.
-// - If information is spread across multiple sections → combine them carefully.
-// - If the question requires calculation (total, sum, combined):
-//   - Extract all relevant numbers from context
-//   - Perform the calculation
-//   - If any number is missing → say "I don't know"
-
-//   CRITICAL:
-// - Only use numerical values if they are explicitly linked to the correct entity.
-// - Do NOT assign numbers to entities unless clearly stated.
-// - If a number refers to a total or general statement, do NOT apply it to a specific item.
-// - Always include all relevant entity attributes (names, positions, company, product) when answering relationship questions
-
-// TASK HANDLING:
-// - For direct questions → return the full answer using all relevant context- For multi-step questions → combine carefully
-// - For comparison questions (e.g., "most", "highest"):
-//   - Only compare entities with clearly stated values
-
-// HANDLING MULTIPLE ENTITIES:
-
-// - If multiple entities are mentioned:
-//   - Select ONLY the one that matches the question
-//   - Do NOT mix information from different entities
-
-// FAILURE CONDITION:
-
-// - Only say "I don't know" if the context truly lacks the information.
-// - Otherwise, combine all available context for a full answer.
-
-// STYLE:
-
-// - Provide complete answers using all relevant context
-// - Be precise and clear
-// - Include entity attributes and context even if the answer is a single number or date
-
-// `;
-
-// - For simple factual answers (numbers, dates, yes/no) → include only the entity and value in the format:
-//   [Entity]: [Value]
-// - For numbers/dates → concise format: [Entity]: [Value].
-
-// HANDLING MULTIPLE ENTITIES:
-
-// - Do NOT mix information from different entities in one answer.
-
-const USE_CHROMA = (process.env.USE_CHROMA || "false").toLowerCase() === "true";
-
-const SYSTEM_PROMPT = `
-You are a question-answering assistant using retrieved context.
-
-RULES:
-
-1. Use ONLY the provided context to answer.
-2. Do NOT use outside knowledge.
-3. Do NOT guess or assume missing information.
-Do not add extra explanations which are irrelavnet.
-
-
-UNDERSTANDING THE TASK:
-
-- If the answer is directly stated → provide it clearly with relevant entity attributes.
-- If information is spread across multiple sections → combine it carefully into a complete answer.
-- If the question requires calculation (total, sum, combined):
-  - Extract all relevant numbers from context.
-  - Perform the calculation.
-  - Show calculation steps if applicable.
-  - If any number is missing → say "I don't know".
-
-CRITICAL:
-
-- Only use numerical values if they are explicitly linked to the correct entity.
-- Do NOT assign numbers to entities unless clearly stated.
-- If a number refers to a total or general statement, do NOT apply it to a specific item.
-- Include entity attributes (names, positions, company, product) when answering relational or multi-step questions.
-
-
-TASK HANDLING:
-
-- For direct factual questions → return the answer concisely.
-- For multi-step, holistic, or relational questions → combine all relevant context carefully.
-- For comparison questions (e.g., "most", "highest") → only compare entities with clearly stated values.
-- If multiple entities are mentioned → select only the ones those match the question.
-- Only say "I don't know" if the context truly lacks the information.
-
-
-STYLE:
-
-- Be precise and clear.
-- Include entity attributes only when necessary.
-- For multi-step or relational answers → include all relevant context and calculation steps if needed.
-- Do NOT add unnecessary explanatory sentences.
--only IF applicable :Name, Title at Company, Additional info if relevant to the question and needed 
-
-
-
-DONTS :
-adding statments like:
-"This information is directly stated in the context provided for her."
-"the context had this info in it etc "
-
-EXAMPLE:
--BAD: "According to the context, Maxine won the award."
-GOOD: "Maxine Thompson won the Insurellm Innovator of the Year (IIOTY) award in 2023."
-
-`;
-
-// ANSWER FORMAT :
-// - only IF applicable :Name, Title at Company, Additional info if relevant
-// such as Jennifer Rodriguez working as a Chief Executive Officer at Insurellm, Inc.
-
 
 function getEmbedder() {
   if (!embedderPromise) {
@@ -163,337 +39,49 @@ function getEmbedder() {
   return embedderPromise;
 }
 
-async function embed(text) {
+async function embedTexts(texts) {
   const embedder = await getEmbedder();
-  const res = await embedder(text, {
-    pooling: "mean",
-    normalize: true,
-  });
-  return Array.from(res.data);
-}
-
-/* ================= SEARCH ================= */
-
-// async function similaritySearch(query, topK = 6) {
-//   const db = getMongoDb();
-//   if (!db) return [];
-
-//   const collection = db.collection(OL_COLLECTION);
-
-//   // 1. Fetch docs
-//   const docs = await collection
-//     .find({}, { projection: { content: 1, embedding: 1 } })
-//     .toArray();
-
-//   if (!docs.length) return [];
-
-//   // 2. Embed query
-//   const queryEmb = await embed(query);
-
-//   // 3. Score all docs
-//   let scoredDocs = docs.map((doc) => ({
-//     document: doc.content,
-//     score: cosineSimilarity(queryEmb, doc.embedding),
-//   }));
-
-//   // 4. Sort by similarity
-//   scoredDocs.sort((a, b) => b.score - a.score);
-
-//   // 🔍 DEBUG (keep this for now)
-//   console.log("Top scores:", scoredDocs.slice(0, 5));
-
-//   // 5. Apply threshold (soft)
-//   let filteredDocs = scoredDocs.filter((doc) => doc.score > 0.3);
-
-//   // 6. Fallback if nothing passes threshold
-//   if (filteredDocs.length === 0) {
-//     console.warn("No docs above threshold, using topK fallback");
-//     filteredDocs = scoredDocs.slice(0, topK);
-//   }
-
-//   // 7. Return topK
-//   return filteredDocs.slice(0, topK);
-// }
-
-// async function similaritySearch(query, topK = 6) {
-
-//    topK = isAggregationQuery(query) ? 8 : 3;
-
-//   const db = getMongoDb();
-//   if (!db) return [];
-
-//   const collection = db.collection(OL_COLLECTION);
-
-//   const docs = await collection
-//     .find({}, { projection: { content: 1, embedding: 1 } })
-//     .toArray();
-
-//   if (!docs.length) return [];
-
-//   // ✅ STEP 1: keyword filter FIRST
-// const keywords = query
-//   .toLowerCase()
-//   .split(" ")
-//   .filter(w => w.length > 3); // remove noise words //check if small words get removed
-
-// let keywordFiltered = docs.filter(doc =>
-//   keywords.some(k => doc.content.toLowerCase().includes(k))
-// );
-//   // ⚠️ fallback if nothing matches keyword
-//   if (keywordFiltered.length === 0) {
-//     keywordFiltered = docs;
-//   }
-
-//   // ✅ STEP 2: embed query
-//   const queryEmb = await embed(query);
-
-//   // ✅ STEP 3: run similarity ONLY on filtered docs
-//   let scoredDocs = keywordFiltered.map((doc) => ({
-//     document: doc.content,
-//     score: cosineSimilarity(queryEmb, doc.embedding),
-//   }));
-
-//   // ✅ STEP 4: sort
-//   scoredDocs.sort((a, b) => b.score - a.score).filter(doc => doc.score > 0.25); //filter
-
-//   // DEBUG
-//   // console.log("Top scores:", scoredDocs.slice(0, 5));
-
-//   // ✅ STEP 5: return topK
-//   return scoredDocs.slice(0, topK);
-// }
-async function similaritySearch(query, topK) {
-  if (USE_CHROMA) {
-    return await similaritySearchChroma(query, topK);
-  } else {
-    return await similaritySearchMongo(query, topK);
-  }
-}
-
-async function similaritySearchMongo(query, topK) {
-  // Allow caller override; otherwise choose based on query type
-  const effectiveTopK =
-    topK !== undefined && topK !== null
-      ? topK
-      : isAggregationQuery(query)
-        ? 8
-        : 3;
-
-  const db = getMongoDb();
-  if (!db) return [];
-
-  const collection = db.collection(OL_COLLECTION);
-
-  let docs = await collection
-    .find({}, { projection: { content: 1, embedding: 1 } })
-    .toArray();
-
-  if (!docs.length) return [];
-
-  const queryLower = query.toLowerCase();
-
-  // ✅ STEP 1: smarter keyword extraction
-  const keywords = queryLower.split(/\s+/).filter((w) => w.length > 2); // less aggressive
-
-  // ✅ STEP 2: keyword filtering (soft)
-  let keywordFiltered = docs.filter((doc) =>
-    keywords.some((k) => doc.content.toLowerCase().includes(k)),
+  const results = await Promise.all(
+    texts.map((t) =>
+      embedder(t, {
+        pooling: "mean",
+        normalize: true,
+      }),
+    ),
   );
-
-  // fallback if too strict
-  if (keywordFiltered.length < 3) {
-    keywordFiltered = docs;
-  }
-
-  // ✅ STEP 3: embed query
-  const queryEmb = await embed(query);
-
-  // ✅ STEP 4: hybrid scoring (semantic + keyword boost)
-  let scoredDocs = keywordFiltered.map((doc) => {
-    const contentLower = doc.content.toLowerCase();
-
-    let score = cosineSimilarity(queryEmb, doc.embedding);
-
-    // 🔥 keyword boost
-    let boost = 0;
-    for (const k of keywords) {
-      if (contentLower.includes(k)) {
-        boost += 0.1;
-      }
-    }
-
-    return {
-      document: doc.content,
-      score: score + boost,
-    };
-  });
-
-  // ✅ STEP 5: sort
-  scoredDocs.sort((a, b) => b.score - a.score);
-
-  // ✅ STEP 6: soft threshold with fallback
-  let filtered = scoredDocs.filter((doc) => doc.score > 0.2);
-
-  if (filtered.length === 0) {
-    filtered = scoredDocs.slice(0, effectiveTopK);
-  }
-
-  // DEBUG (keep this!)
-  // console.log("Top scores:", scoredDocs.slice(0, 5));
-
-  // ✅ STEP 7: return topK
-  return filtered.slice(0, effectiveTopK);
+  return results.map((res) => Array.from(res.data));
 }
 
-/* ================= MAIN ================= */
+async function readMarkdownDocs(rootDir) {
+  const entries = await fs.readdir(rootDir, { withFileTypes: true });
+  const docs = [];
 
-const ENABLE_REWRITE = process.env.ENABLE_REWRITE || "false";
-const ENABLE_EXPAND = process.env.ENABLE_EXPAND || "false";
-const ENABLE_RERANK = process.env.ENABLE_RERANK || "false";
-const ENABLE_HYBRID_SCORE = process.env.ENABLE_HYBRID_SCORE || "true";
-const minScore = process.env.MIN_SCORE || 0.35;
-const SWITCH = process.env.SWITCH || "false";
-// console.log(SWITCH, "SWITCH");
+  for (const entry of entries) {
+    const fullPath = path.join(rootDir, entry.name);
 
-const EXPANSIONS = Number(process.env.EXPANSIONS || 2);
-
-export const modifiedRAGService = {
-  generateResponse: async (question, _unused = undefined, opts = {}) => {
-    const { topK, temperature = 0.2, maxTokens = 150 } = opts;
-
-    let baseQuery = question;
-    let context;
-    let prompt;
-    let results;
-    if (false) { //SWITCH
-      if (ENABLE_REWRITE) {
-        baseQuery = await rewriteQuery(baseQuery);
-      }
-
-      // 2️⃣ Optional: Expand query to multiple variants
-      let queries = [baseQuery];
-      if (ENABLE_EXPAND) {
-        queries = await expandQuery(baseQuery, EXPANSIONS);
-      }
-
-      // 3️⃣ Retrieve and combine results from all query variants
-      let retrieved = [];
-      for (const q of queries) {
-        const hits = await similaritySearch(q, topK);
-        retrieved.push(...hits);
-      }
-
-      // 4️⃣ Filter early by minScore to reduce array size (performance)
-      retrieved = retrieved.filter((r) => r.score >= minScore);
-
-      // 5️⃣ Optional: Rerank chunks with LLM
-      if (ENABLE_RERANK) {
-        retrieved = await reorderChunksWithLLM(retrieved, queries[0]);
-      }
-
-      // 6️⃣ Build context string (you can slice if needed for long docs)
-      context = retrieved
-        .map(
-          (r, i) =>
-            `SOURCE(${i + 1}):\n${r.document.slice(0, CONTEXT_SNIPPET_CHARS)}`,
-        ) // slice prevents huge context
-        .join("\n\n");
-
-      // 7️⃣ Build prompt
-      prompt = `
-CONTEXT:
-${context}
-
-Question: ${question}
-
-#
-IMPORTANT:
-- Only use values clearly tied to entities
-- Do not assume or infer missing numbers 
-
-ANSWER:
-`;
-    } else {
-      // console.log("query", question);
-      // 1. Retrieve
-      results = await similaritySearch(question, topK);
-      // console.log("results", results);
-
-      // 2. Build simple context
-      context = results
-        .map((r, i) => `SOURCE(${i + 1}):\n${r.document}`) //why slice
-
-        // .map((r, i) => `(${i + 1}) ${r.document.slice(0, 300)}`) //why slice
-        .join("\n\n");
-
-      // console.log("context", context);
-
-      prompt = `
-
-CONTEXT:
-${context}
-
-Question: ${question}
-
-
-#
-IMPORTANT:
-- Only use values clearly tied to entities
-- Do not assume or infer missing numbers 
-
-ANSWER:
-
-`;
+    if (entry.isDirectory()) {
+      const nested = await readMarkdownDocs(fullPath);
+      docs.push(...nested);
+      continue;
     }
 
-    const messages = [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: prompt },
-    ];
+    if (!entry.name.toLowerCase().endsWith(".md")) continue;
 
-    // 3. Ask LLM
-    const response = await axios.post(`${OLLAMA_API_URL}/api/chat`, {
-      model: MODEL_NAME,
-      stream: false,
-      messages: messages,
-      options: {
-        temperature,
-        num_predict: maxTokens,
-      },
-    });
-
-    const answer = response.data?.message?.content?.trim() || "";
-    console.log("model anserr", answer);
-
-    return {
-      type: "text",
-      message: answer,
-      contextUsed: results,
-    };
-  },
-};
-
-/* ================= UTILS ================= */
-
-function cosineSimilarity(a, b) {
-  if (!a || !b || a.length !== b.length) return 0;
-
-  let dot = 0,
-    normA = 0,
-    normB = 0;
-
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
+    const content = await fs.readFile(fullPath, "utf-8");
+    docs.push(
+      new Document({
+        pageContent: content,
+        metadata: { source: path.relative(OL_ROOT, fullPath) },
+      }),
+    );
   }
 
-  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+  return docs;
 }
 
 export async function loadBase() {
   if (baseLoaded) return;
-  // console.log("Loading knowledge base...");
+  console.log("Loading knowledge base...");
 
   const mongoClient = await connectMongo();
   const db = getMongoDb();
@@ -506,19 +94,24 @@ export async function loadBase() {
   }
 
   const rawDocs = await readMarkdownDocs(OL_ROOT);
+  // Use recursive character splitter for predictable chunks
   const splitter = new RecursiveCharacterTextSplitter({
-    chunkSize: CHUNK_SIZE,
-    chunkOverlap: CHUNK_OVERLAP,
+    chunkSize: 600,
+    chunkOverlap: 120,
   });
   const chunks = await splitter.splitDocuments(rawDocs);
 
   const vectors = await embedTexts(chunks.map((c) => c.pageContent));
 
-  const enriched = chunks.map((doc) => ({
-    doc,
-    headline: deriveHeadline(doc),
-    summary: summarizeText(doc.pageContent),
-  }));
+  // Enrich each chunk with heuristic headline/summary (no LLM needed)
+  const enriched = [];
+  for (const doc of chunks) {
+    enriched.push({
+      doc,
+      headline: deriveHeadline(doc),
+      summary: summarizeText(doc.pageContent),
+    });
+  }
 
   const collection = db.collection(OL_COLLECTION);
   await collection.deleteMany({});
@@ -551,16 +144,141 @@ export async function loadBase() {
   baseLoaded = true;
 }
 
-function isAggregationQuery(q) {
-  return (
-    q.toLowerCase().includes("total") ||
-    q.toLowerCase().includes("sum") ||
-    q.toLowerCase().includes("combined")
-  );
+async function similaritySearchMongo(query, topK = 12) {
+  const db = getMongoDb();
+  if (!db) return [];
+
+  const collection = db.collection(OL_COLLECTION);
+  const docs = await collection
+    .find(
+      {},
+      {
+        projection: {
+          content: 1,
+          summary: 1,
+          headline: 1,
+          metadata: 1,
+          embedding: 1,
+        },
+      },
+    )
+    .toArray();
+
+  if (docs.length === 0) return [];
+
+  const [queryEmb] = await embedTexts([query]);
+
+  const scored = docs
+    .map((doc) => ({
+      id: doc._id,
+      document: doc.content,
+      summary: doc.summary,
+      headline: doc.headline,
+      metadata: doc.metadata,
+      score: cosineSimilarity(queryEmb, doc.embedding),
+    }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, topK);
+
+  // console.log("scored",scored);
+
+  return scored;
+}
+
+async function reorderChunksWithLLM(chunks, query) {
+  // If fewer than 2 chunks, no reordering needed
+  if (!chunks || chunks.length < 2) return chunks;
+
+  // Build a concise list of chunk refs for the model
+  const listing = chunks
+    .map(
+      (c, i) =>
+        `Chunk ${i + 1} | id=${c.id} | score=${c.score.toFixed(
+          3,
+        )}\nHeadline: ${c.headline || "N/A"}\nSummary/snippet: ${summarizeText(
+          c.document,
+          320,
+        )}`,
+    )
+    .join("\n\n");
+
+  const prompt = `You are reranking retrieved context chunks for a question.
+
+Question: ${query}
+
+Chunks (in current order):
+${listing}
+
+Return only a JSON array of chunk ids in the best order for answering the question, most relevant first. Example: ["docA::0","docB::1"]`;
+
+  try {
+    const res = await axios.post(`${OLLAMA_API_URL}/api/chat`, {
+      model: MODEL_NAME,
+      stream: false,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You reorder chunk IDs by relevance and reply with JSON array only.",
+        },
+        { role: "user", content: prompt },
+      ],
+      options: { temperature: 0, num_predict: 200 },
+      timeout: 12000,
+    });
+
+    let content = res.data?.message?.content?.trim() || "";
+    content = content
+      .replace(/```json/i, "")
+      .replace(/```/g, "")
+      .trim();
+    const start = content.indexOf("[");
+    const end = content.lastIndexOf("]");
+    if (start !== -1 && end !== -1 && end > start) {
+      content = content.slice(start, end + 1);
+    }
+    // Normalize common mistakes: single quotes, trailing commas, control chars
+    content = content
+      .replace(/'/g, '"')
+      .replace(/,\s*\]/g, "]")
+      .replace(/[\u0000-\u001F]+/g, " ")
+      .trim();
+    let ids;
+    try {
+      ids = JSON.parse(content);
+    } catch (parseErr) {
+      // Fallback: extract quoted tokens
+      const matches = Array.from(content.matchAll(/"([^"]+)"/g)).map(
+        (m) => m[1],
+      );
+      if (matches.length) {
+        ids = matches;
+      } else {
+        throw parseErr;
+      }
+    }
+    if (!Array.isArray(ids))
+      throw new Error("Parsed reorder result is not array");
+
+    // Map ids to chunks; keep original if missing
+    const byId = Object.fromEntries(chunks.map((c) => [c.id, c]));
+    const reordered = ids.map((id) => byId[id]).filter(Boolean);
+
+    // Append any chunks not returned by the model (to preserve recall)
+    const remaining = chunks.filter((c) => !reordered.includes(c));
+    return [...reordered, ...remaining].slice(0, 6);
+  } catch (err) {
+    console.warn(
+      "Chunk rerank via LLM failed, keeping original order:",
+      err.message,
+    );
+    return chunks;
+  }
 }
 
 async function rewriteQuery(query) {
   try {
+    const prompt = `Rewrite the question to be clear, specific, and unambiguous while keeping meaning identical. Do NOT add or infer any new facts. Reply with the rewritten question only.`;
     const res = await axios.post(`${OLLAMA_API_URL}/api/chat`, {
       model: MODEL_NAME,
       stream: false,
@@ -570,18 +288,15 @@ async function rewriteQuery(query) {
           content:
             "Rewrite questions concisely; no new facts; respond with plain text only.",
         },
-        {
-          role: "user",
-          content: `Rewrite the question to be clear, specific, and unambiguous while keeping meaning identical. Do NOT add or infer any new facts. Reply with the rewritten question only. Question: ${query}`,
-        },
+        { role: "user", content: query },
       ],
-      options: { temperature: 0.1, num_predict: 64 },
+      options: { temperature: 0, num_predict: 64 },
       timeout: 5000,
     });
     let rewritten = res.data?.message?.content || "";
     rewritten = rewritten
       .replace(/```/g, "")
-      .replace(/^['"]|['"]$/g, "")
+      .replace(/^["']|["']$/g, "")
       .trim();
     if (rewritten) return rewritten;
   } catch (err) {
@@ -590,10 +305,10 @@ async function rewriteQuery(query) {
   return query;
 }
 
-async function expandQuery(query, variants = EXPANSIONS) {
-  const rewritten = query;
-  if (!ENABLE_EXPAND) return [rewritten];
+async function expandQuery(query, variants = 2) {
+  const rewritten = await rewriteQuery(query);
   try {
+    const prompt = `Generate ${variants} alternative phrasings for this question. Keep meaning identical; do NOT add or assume new facts. Return a JSON array of strings.\nQuestion: ${rewritten}`;
     const res = await axios.post(`${OLLAMA_API_URL}/api/chat`, {
       model: MODEL_NAME,
       stream: false,
@@ -603,12 +318,9 @@ async function expandQuery(query, variants = EXPANSIONS) {
           content:
             "You generate alternative phrasings; no new facts; respond with JSON array.",
         },
-        {
-          role: "user",
-          content: `Generate ${variants} alternative phrasings for this question. Keep meaning identical; do NOT add or assume new facts. Return a JSON array of strings. Question: ${rewritten}`,
-        },
+        { role: "user", content: prompt },
       ],
-      options: { temperature: 0.1, num_predict: 200 },
+      options: { temperature: 0.2, num_predict: 200 },
       timeout: 8000,
     });
     let content = res.data?.message?.content || "";
@@ -631,123 +343,143 @@ async function expandQuery(query, variants = EXPANSIONS) {
     return [rewritten];
   }
 }
-const RETRIEVE_TOPK = Number(process.env.RETRIEVE_TOPK || 3);
-const RERANK_TOPK = Number(process.env.RERANK_TOPK || RETRIEVE_TOPK);
 
-const CONTEXT_SNIPPET_CHARS = Number(process.env.CONTEXT_SNIPPET_CHARS || 200);
-/**
- * Reorder retrieved context chunks using LLM relevance scoring
- * @param {Array} chunks - Array of {id, document, score, headline, summary, metadata}
- * @param {string} query - The original user query
- * @returns {Array} - Reordered chunks (most relevant first)
- */
-export async function reorderChunksWithLLM(chunks, query) {
-  if (!ENABLE_RERANK || !chunks || chunks.length < 2) return chunks;
+function buildSystemPrompt(systemPrompt, contexts) {
+  const contextBlock =
+    contexts.length === 0
+      ? "No relevant context found in the vector store."
+      : contexts
+          .map(
+            (ctx, idx) =>
+              `Context ${idx + 1} (id: ${ctx.id}):
+Headline: ${ctx.headline || "N/A"}
+Summary: ${ctx.summary || "N/A"}
+Content:
+${ctx.document.trim()}`,
+          )
+          .join("\n\n");
 
-  // 1. Build a listing string for LLM
-  const listing = chunks
-    .map(
-      (c, i) =>
-        `Chunk ${i + 1} | id=${c.id} | score=${c.score?.toFixed(3) || 0}\n` +
-        `Headline: ${c.headline || "N/A"}\n` +
-        `Summary/snippet: ${c.summary || c.document.slice(0, 200)}`,
-    )
-    .join("\n\n");
-
-  // 2. Construct LLM prompt
-  const prompt = `You are reranking retrieved context chunks for a question.
-
-Question: ${query}
-
-Chunks (in current order):
-${listing}
-
-Return only a JSON array of chunk ids in the best order for answering the question, most relevant first. Example: ["docA::0","docB::1"]`;
-
-  try {
-    const res = await axios.post(`${OLLAMA_API_URL}/api/chat`, {
-      model: MODEL_NAME,
-      stream: false,
-      messages: [
-        {
-          role: "system",
-          content:
-            "You reorder chunk IDs by relevance and reply with JSON array only.",
-        },
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-      options: { temperature: 0.1, num_predict: 200 },
-      timeout: 12000,
-    });
-
-    let content = res.data?.message?.content?.trim() || "";
-
-    // Remove markdown or extra characters
-    content = content
-      .replace(/```json/i, "")
-      .replace(/```/g, "")
-      .trim();
-    const start = content.indexOf("[");
-    const end = content.lastIndexOf("]");
-    if (start !== -1 && end !== -1 && end > start)
-      content = content.slice(start, end + 1);
-    content = content
-      .replace(/'/g, '"')
-      .replace(/,\s*\]/g, "]")
-      .replace(/[\u0000-\u001F]+/g, " ");
-
-    let ids;
-    try {
-      ids = JSON.parse(content);
-    } catch (e) {
-      // fallback: extract quoted strings if JSON parse fails
-      const matches = Array.from(content.matchAll(/"([^"]+)"/g)).map(
-        (m) => m[1],
-      );
-      if (matches.length) ids = matches;
-      else throw e;
-    }
-
-    if (!Array.isArray(ids))
-      throw new Error("Parsed reorder result is not array");
-
-    // 3. Map back to original chunks
-    const byId = Object.fromEntries(chunks.map((c) => [c.id, c]));
-    const reordered = ids.map((id) => byId[id]).filter(Boolean);
-    const remaining = chunks.filter((c) => !reordered.includes(c));
-
-    // Return top K only
-    return [...reordered, ...remaining].slice(0, RERANK_TOPK);
-  } catch (err) {
-    console.warn(
-      "Chunk rerank via LLM failed, keeping original order:",
-      err.message,
-    );
-    return chunks;
-  }
+  return `${systemPrompt}\n\nRetrieved context:\n${contextBlock}`;
 }
 
-// import { getCollection } from "../db/chromaClient.js";
-// import { embedTexts } from "./embed.js";
+function cosineSimilarity(a, b) {
+  if (!a || !b || a.length !== b.length) return 0;
+  let dot = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  if (normA === 0 || normB === 0) return 0;
+  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+}
 
-// async function similaritySearchChroma(query, topK) {
-//   const collection = await getCollection();
-//   const [queryEmbedding] = await embedTexts([query]);
+function deriveHeadline(doc) {
+  // Prefer filename (without directories) as a simple headline fallback
+  const src = doc?.metadata?.source || "";
+  const fileName = src.split(/[/\\\\]/).pop() || "";
+  const titleFromFile = fileName
+    .replace(/\.md$/i, "")
+    .replace(/[-_]/g, " ")
+    .trim();
 
-//   const results = await collection.query({
-//     queryEmbeddings: [queryEmbedding],
-//     nResults: topK,
-//   });
+  // Try first markdown heading if present
+  const firstLine =
+    doc?.pageContent?.split(/\r?\n/).find((l) => l.trim()) || "";
+  const headingMatch = firstLine.match(/^#\s*(.+)/);
+  if (headingMatch) return headingMatch[1].trim();
 
-//   return results.ids[0].map((id, i) => ({
-//     id,
-//     document: results.documents[0][i],
-//     metadata: results.metadatas[0][i],
-//     score: 1 - (results.distances?.[0]?.[i] || 0), // convert distance → similarity
-//   }));
-// }
+  return titleFromFile || "Untitled";
+}
 
-export default modifiedRAGService;
+function summarizeText(text, maxLen = 240) {
+  const clean = text.replace(/\s+/g, " ").trim();
+  if (clean.length <= maxLen) return clean;
+  const truncated = clean.slice(0, maxLen);
+  const lastDot = truncated.lastIndexOf(".");
+  if (lastDot > 60) return truncated.slice(0, lastDot + 1).trim();
+  return truncated.trim() + "...";
+}
+
+export const modifiedRAGService = {
+  loadBase,
+  generateResponse: async (
+  message,
+  systemPrompt = DEFAULT_SYSTEM_PROMPT,
+  options = {}
+) => {
+  const {
+    temperature = 0.2,
+    maxTokens = 200,
+    topP = 0.9,
+  } = options;
+
+  await chatService.saveMessage("user", message);
+
+  // 🔥 STEP 1: Simple retrieval (NO expansion, NO rewrite)
+  let retrieved = await similaritySearchMongo(message, 6);
+
+  // 🔥 STEP 2: Filter weak matches (CRITICAL)
+  retrieved = retrieved
+    .filter((r) => r.score > 0.5)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3); // only top 3
+
+  // 🔥 STEP 3: Build CLEAN context (no summaries, no headlines)
+  const contextBlock =
+    retrieved.length === 0
+      ? "No relevant information found."
+      : retrieved
+          .map((ctx, i) => {
+            const clean = ctx.document
+              .replace(/\s+/g, " ")
+              .slice(0, 300); // HARD LIMIT
+
+            return `(${i + 1}) ${clean}`;
+          })
+          .join("\n");
+
+  const finalSystemPrompt = `
+${systemPrompt}
+
+Use ONLY the relevant information below:
+
+${contextBlock}
+`;
+
+  const messages = [
+    { role: "system", content: finalSystemPrompt },
+    { role: "user", content: message },
+  ];
+
+  try {
+    const response = await axios.post(`${OLLAMA_API_URL}/api/chat`, {
+      model: MODEL_NAME,
+      messages,
+      stream: false,
+      options: {
+        temperature,
+        num_predict: maxTokens,
+        top_p: topP,
+      },
+    });
+
+    const content = response.data?.message?.content?.trim() || "";
+
+    await chatService.saveMessage("assistant", content);
+
+    return {
+      type: "text",
+      message: content,
+      contextUsed: retrieved,
+    };
+  } catch (error) {
+    console.error("Error calling Ollama:", error.message);
+    throw new Error(`Failed to get response from Ollama: ${error.message}`);
+  }
+}
+};
+
+export default modifiedRAGService

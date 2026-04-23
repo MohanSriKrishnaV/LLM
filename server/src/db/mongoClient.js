@@ -22,13 +22,7 @@ export async function connectMongo() {
     return null;
   }
 
-  client = new MongoClient(uri, {
-  serverApi: {
-    version:"1",
-    strict: true,
-    deprecationErrors: true,
-  },
-});
+  client = new MongoClient(uri, { maxPoolSize: 10 });
   await client.connect();
 
   console.log("Connected to MongoDB:", uri);

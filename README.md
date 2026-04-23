@@ -50,10 +50,41 @@ A full-stack JavaScript application for chatting with a local Llama LLM through 
   ![RAG-based chat screen](docs/img/rag-based-llm-1.png)
 
 
-## Evaluation & QA
-- Scripts are included to automatically check answer correctness against reference data.
-- Evaluations run over a provided `.jsonl` file containing question/answer pairs.
-- Reported metrics include accuracy, mean reciprocal rank (MRR), and related retrieval scores.
+## 🧪 Evaluation & Testing
+
+The project includes comprehensive evaluation scripts to test the RAG system's performance on various question types.
+
+### Test Datasets
+- `server/data/evaluation/tests.jsonl`: Main test dataset with question/answer pairs covering company information, contracts, employees, and products.
+- Additional variants: `test.jsonl`, `tester.jsonl` for different evaluation scenarios.
+
+### Question Types (Qsns)
+The evaluation covers diverse question types including:
+- Factual queries about company data
+- Contract value calculations
+- Employee information lookups
+- Product pricing and features
+- Historical data retrieval
+
+![RAG Questions Overview](docs/img/rag-qsns.png)
+
+### Evaluation Metrics
+- Accuracy: Percentage of correct answers
+- Mean Reciprocal Rank (MRR): Ranking quality metric
+- Retrieval scores and keyword coverage
+
+### Results
+Evaluation results are generated in HTML and JSON formats, stored in `server/data/evaluation/results/`.
+
+![RAG Best Results](docs/img/Rag-best-result.png)
+
+To run evaluations:
+```bash
+cd server/data/evaluation
+node eval.js
+```
+
+This will process the test datasets and generate performance reports.
 
 ## Feature Highlights
 - 🗂️ **Conversation history** persisted in SQLite (`server/data/chat.db`) with clear/restore endpoints; contains all chat types (basic/tool/RAG) and is retrievable via `/api/chat/history`.

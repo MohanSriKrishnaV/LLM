@@ -1,4 +1,4 @@
-﻿import axios from "axios";
+import axios from "axios";
 import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -13,29 +13,15 @@ const MODEL_NAME = process.env.MODEL_NAME || "qwen2.5:3b";
 const OL_COLLECTION = process.env.OL_COLLECTION || "ol_chunks";
 const EMBED_MODEL = process.env.EMBED_MODEL || "Xenova/all-MiniLM-L6-v2"; // local, no API key
 
-// Feature flags / tunables
-const ENABLE_REWRITE = (process.env.ENABLE_REWRITE || "false").toLowerCase() === "true";
-const ENABLE_EXPAND = (process.env.ENABLE_EXPAND || "false").toLowerCase() === "true";
-const ENABLE_RERANK = (process.env.ENABLE_RERANK || "false").toLowerCase() === "true";
-const ENABLE_HYBRID_SCORE = (process.env.ENABLE_HYBRID_SCORE || "true").toLowerCase() === "true";
-
-const EXPANSIONS = Number(process.env.EXPANSIONS || 2);
-const RETRIEVE_TOPK = Number(process.env.RETRIEVE_TOPK || 5);
-const RERANK_TOPK = Number(process.env.RERANK_TOPK || RETRIEVE_TOPK);
-const CHUNK_SIZE = Number(process.env.CHUNK_SIZE || 300);
-const CHUNK_OVERLAP = Number(process.env.CHUNK_OVERLAP || 120);
-const MIN_SCORE = Number(process.env.MIN_SCORE || 0.45);
-const CONTEXT_SNIPPET_CHARS = Number(process.env.CONTEXT_SNIPPET_CHARS || 200);
-const VEC_WEIGHT = Number(process.env.VEC_WEIGHT || 0.7);
-const KEY_WEIGHT = Number(process.env.KEY_WEIGHT || 0.3);
-const KEYWORD_CONTENT_WEIGHT = Number(process.env.KEYWORD_CONTENT_WEIGHT || 0.6);
-const KEYWORD_META_WEIGHT = Number(process.env.KEYWORD_META_WEIGHT || 0.4);
-
-const DEFAULT_SYSTEM_PROMPT = `
-You are an insurance assistant.
-
-Answer using only the provided context. Keep it concise (1–2 sentences). If the answer is not in the context, say "I don't know." Do NOT mention context, sources, or IDs. Do not speculate.
-`;
+const DEFAULT_SYSTEM_PROMPT = [
+  "You represent an insurance company.",
+  "Answer questions about employees and products using the retrieved context.",
+  "Answer the user's question naturally and conversationally.",
+  "Use the provided context only as background knowledge.",
+  "Keep answers brief; if unsure, say you don't know.",
+  "Do NOT mention the context or say anything like based on the context and the information provided such as based on the context proivded or based on the information provided",
+  "Just give a clean, human-like readable answer.",
+].join(" ");
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -108,19 +94,24 @@ export async function loadBase() {
   }
 
   const rawDocs = await readMarkdownDocs(OL_ROOT);
+  // Use recursive character splitter for predictable chunks
   const splitter = new RecursiveCharacterTextSplitter({
-    chunkSize: CHUNK_SIZE,
-    chunkOverlap: CHUNK_OVERLAP,
+    chunkSize: 600,
+    chunkOverlap: 120,
   });
   const chunks = await splitter.splitDocuments(rawDocs);
 
   const vectors = await embedTexts(chunks.map((c) => c.pageContent));
 
-  const enriched = chunks.map((doc) => ({
-    doc,
-    headline: deriveHeadline(doc),
-    summary: summarizeText(doc.pageContent),
-  }));
+  // Enrich each chunk with heuristic headline/summary (no LLM needed)
+  const enriched = [];
+  for (const doc of chunks) {
+    enriched.push({
+      doc,
+      headline: deriveHeadline(doc),
+      summary: summarizeText(doc.pageContent),
+    });
+  }
 
   const collection = db.collection(OL_COLLECTION);
   await collection.deleteMany({});
@@ -134,9 +125,7 @@ export async function loadBase() {
       source: doc.metadata?.source,
       chunk: idx,
       type:
-        (doc.metadata?.source || "")
-          .split(/[/\\\\]/)[0]
-          .trim() || "unknown",
+        (doc.metadata?.source || "").split(/[/\\\\]/)[0].trim() || "unknown",
       wordCount: doc.pageContent.split(/\s+/).length,
       createdAt: new Date(),
     },
@@ -155,7 +144,7 @@ export async function loadBase() {
   baseLoaded = true;
 }
 
-async function similaritySearchMongo(query, topK = RETRIEVE_TOPK) {
+async function similaritySearchMongo(query, topK = 12) {
   const db = getMongoDb();
   if (!db) return [];
 
@@ -182,30 +171,29 @@ async function similaritySearchMongo(query, topK = RETRIEVE_TOPK) {
   const scored = docs
     .map((doc) => {
       const vectorScore = cosineSimilarity(queryEmb, doc.embedding);
-      const keyScore =
-        KEYWORD_CONTENT_WEIGHT * keywordScore(query, doc.content) +
-        KEYWORD_META_WEIGHT * keywordScore(query, doc.metadata?.source || "");
-      const score = ENABLE_HYBRID_SCORE
-        ? VEC_WEIGHT * vectorScore + KEY_WEIGHT * keyScore
-        : vectorScore;
+      const keyScore = keywordScore(query, doc.content);
       return {
         id: doc._id,
         document: doc.content,
         summary: doc.summary,
         headline: doc.headline,
         metadata: doc.metadata,
-        score,
+        score: 0.7 * vectorScore + 0.3 * keyScore, // 🔥 hybrid
       };
     })
     .sort((a, b) => b.score - a.score)
     .slice(0, topK);
 
+  // console.log("scored",scored);
+
   return scored;
 }
 
 async function reorderChunksWithLLM(chunks, query) {
-  if (!ENABLE_RERANK || !chunks || chunks.length < 2) return chunks;
+  // If fewer than 2 chunks, no reordering needed
+  if (!chunks || chunks.length < 2) return chunks;
 
+  // Build a concise list of chunk refs for the model
   const listing = chunks
     .map(
       (c, i) =>
@@ -234,54 +222,86 @@ Return only a JSON array of chunk ids in the best order for answering the questi
       messages: [
         {
           role: "system",
-          content: "You reorder chunk IDs by relevance and reply with JSON array only.",
+          content:
+            "You reorder chunk IDs by relevance and reply with JSON array only.",
         },
         { role: "user", content: prompt },
       ],
-      options: { temperature: 0.1, num_predict: 200 },
+      options: { temperature: 0, num_predict: 200 },
       timeout: 12000,
     });
 
     let content = res.data?.message?.content?.trim() || "";
-    content = content.replace(/```json/i, "").replace(/```/g, "").trim();
+    content = content
+      .replace(/```json/i, "")
+      .replace(/```/g, "")
+      .trim();
     const start = content.indexOf("[");
     const end = content.lastIndexOf("]");
-    if (start !== -1 && end !== -1 && end > start) content = content.slice(start, end + 1);
-    content = content.replace(/'/g, '"').replace(/,\s*\]/g, "]").replace(/[\u0000-\u001F]+/g, " ");
+    if (start !== -1 && end !== -1 && end > start) {
+      content = content.slice(start, end + 1);
+    }
+    // Normalize common mistakes: single quotes, trailing commas, control chars
+    content = content
+      .replace(/'/g, '"')
+      .replace(/,\s*\]/g, "]")
+      .replace(/[\u0000-\u001F]+/g, " ")
+      .trim();
     let ids;
     try {
       ids = JSON.parse(content);
-    } catch (e) {
-      const matches = Array.from(content.matchAll(/"([^"]+)"/g)).map((m) => m[1]);
-      if (matches.length) ids = matches;
-      else throw e;
+    } catch (parseErr) {
+      // Fallback: extract quoted tokens
+      const matches = Array.from(content.matchAll(/"([^"]+)"/g)).map(
+        (m) => m[1],
+      );
+      if (matches.length) {
+        ids = matches;
+      } else {
+        throw parseErr;
+      }
     }
-    if (!Array.isArray(ids)) throw new Error("Parsed reorder result is not array");
+    if (!Array.isArray(ids))
+      throw new Error("Parsed reorder result is not array");
 
+    // Map ids to chunks; keep original if missing
     const byId = Object.fromEntries(chunks.map((c) => [c.id, c]));
     const reordered = ids.map((id) => byId[id]).filter(Boolean);
+
+    // Append any chunks not returned by the model (to preserve recall)
     const remaining = chunks.filter((c) => !reordered.includes(c));
-    return [...reordered, ...remaining].slice(0, RERANK_TOPK);
+    return [...reordered, ...remaining].slice(0, 6);
   } catch (err) {
-    console.warn("Chunk rerank via LLM failed, keeping original order:", err.message);
+    console.warn(
+      "Chunk rerank via LLM failed, keeping original order:",
+      err.message,
+    );
     return chunks;
   }
 }
 
 async function rewriteQuery(query) {
   try {
+    const prompt = `Rewrite the question to be clear, specific, and unambiguous while keeping meaning identical. Do NOT add or infer any new facts. Reply with the rewritten question only.`;
     const res = await axios.post(`${OLLAMA_API_URL}/api/chat`, {
       model: MODEL_NAME,
       stream: false,
       messages: [
-        { role: "system", content: "Rewrite questions concisely; no new facts; respond with plain text only." },
-        { role: "user", content: `Rewrite the question to be clear, specific, and unambiguous while keeping meaning identical. Do NOT add or infer any new facts. Reply with the rewritten question only. Question: ${query}` },
+        {
+          role: "system",
+          content:
+            "Rewrite questions concisely; no new facts; respond with plain text only.",
+        },
+        { role: "user", content: query },
       ],
-      options: { temperature: 0.1, num_predict: 64 },
+      options: { temperature: 0, num_predict: 64 },
       timeout: 5000,
     });
     let rewritten = res.data?.message?.content || "";
-    rewritten = rewritten.replace(/```/g, "").replace(/^['"]|['"]$/g, "").trim();
+    rewritten = rewritten
+      .replace(/```/g, "")
+      .replace(/^["']|["']$/g, "")
+      .trim();
     if (rewritten) return rewritten;
   } catch (err) {
     console.warn("Query rewrite failed, using original:", err.message);
@@ -289,27 +309,37 @@ async function rewriteQuery(query) {
   return query;
 }
 
-async function expandQuery(query, variants = EXPANSIONS) {
-  const rewritten = query;
-  if (!ENABLE_EXPAND) return [rewritten];
+async function expandQuery(query, variants = 2) {
+  const rewritten = await rewriteQuery(query);
   try {
+    const prompt = `Generate ${variants} alternative phrasings for this question. Keep meaning identical; do NOT add or assume new facts. Return a JSON array of strings.\nQuestion: ${rewritten}`;
     const res = await axios.post(`${OLLAMA_API_URL}/api/chat`, {
       model: MODEL_NAME,
       stream: false,
       messages: [
-        { role: "system", content: "You generate alternative phrasings; no new facts; respond with JSON array." },
-        { role: "user", content: `Generate ${variants} alternative phrasings for this question. Keep meaning identical; do NOT add or assume new facts. Return a JSON array of strings. Question: ${rewritten}` },
+        {
+          role: "system",
+          content:
+            "You generate alternative phrasings; no new facts; respond with JSON array.",
+        },
+        { role: "user", content: prompt },
       ],
-      options: { temperature: 0.1, num_predict: 200 },
+      options: { temperature: 0.2, num_predict: 200 },
       timeout: 8000,
     });
     let content = res.data?.message?.content || "";
-    content = content.replace(/```json/i, "").replace(/```/g, "").trim();
+    content = content
+      .replace(/```json/i, "")
+      .replace(/```/g, "")
+      .trim();
     const start = content.indexOf("[");
     const end = content.lastIndexOf("]");
-    if (start !== -1 && end !== -1 && end > start) content = content.slice(start, end + 1);
+    if (start !== -1 && end !== -1 && end > start)
+      content = content.slice(start, end + 1);
     const arr = JSON.parse(content);
-    const strings = Array.isArray(arr) ? arr.map((s) => String(s).trim()).filter(Boolean) : [];
+    const strings = Array.isArray(arr)
+      ? arr.map((s) => String(s).trim()).filter(Boolean)
+      : [];
     const dedup = Array.from(new Set([rewritten, ...strings]));
     return dedup;
   } catch (err) {
@@ -318,38 +348,22 @@ async function expandQuery(query, variants = EXPANSIONS) {
   }
 }
 
-function buildSystemPrompt(systemPrompt, contexts, query) {
+function buildSystemPrompt(systemPrompt, contexts) {
   const contextBlock =
     contexts.length === 0
       ? "No relevant context found in the vector store."
       : contexts
-          .map((ctx, idx) => {
-            // 🔥 THIS is where it's used
-            const keySentence = extractRelevantSentence(ctx.document, query);
+          .map(
+            (ctx, idx) =>
+              `Context ${idx + 1} (id: ${ctx.id}):
+Headline: ${ctx.headline || "N/A"}
+Summary: ${ctx.summary || "N/A"}
+Content:
+${ctx.document.trim()}`,
+          )
+          .join("\n\n");
 
-            const snippet = ctx.document
-              .replace(/\s+/g, " ")
-              .slice(0, CONTEXT_SNIPPET_CHARS);
-
-            return [
-              `Context ${idx + 1}`,
-              `Headline: ${ctx.headline || "N/A"}`,
-
-              // 🔥 MOST IMPORTANT PART
-              `Key Fact: ${keySentence || snippet}`,
-
-              `Additional Context: ${snippet}`,
-            ].join("\n");
-          })
-          .join("\n\n---\n\n");
-
-  return `${systemPrompt}
-
-Question: ${query}
-
-Find the exact answer in the context below.
-
-${contextBlock}`;
+  return `${systemPrompt}\n\nRetrieved context:\n${contextBlock}`;
 }
 
 function cosineSimilarity(a, b) {
@@ -367,12 +381,20 @@ function cosineSimilarity(a, b) {
 }
 
 function deriveHeadline(doc) {
+  // Prefer filename (without directories) as a simple headline fallback
   const src = doc?.metadata?.source || "";
   const fileName = src.split(/[/\\\\]/).pop() || "";
-  const titleFromFile = fileName.replace(/\.md$/i, "").replace(/[-_]/g, " ").trim();
-  const firstLine = doc?.pageContent?.split(/\r?\n/).find((l) => l.trim()) || "";
+  const titleFromFile = fileName
+    .replace(/\.md$/i, "")
+    .replace(/[-_]/g, " ")
+    .trim();
+
+  // Try first markdown heading if present
+  const firstLine =
+    doc?.pageContent?.split(/\r?\n/).find((l) => l.trim()) || "";
   const headingMatch = firstLine.match(/^#\s*(.+)/);
   if (headingMatch) return headingMatch[1].trim();
+
   return titleFromFile || "Untitled";
 }
 
@@ -396,52 +418,39 @@ export const ImpRAGService = {
       temperature = 0.3,
       maxTokens = 500,
       topP = 0.9,
-      topK = RETRIEVE_TOPK,
-      expansions = EXPANSIONS,
+      topK = 12,
+      expansions = 2,
     } = options;
 
-    const minPredict = Math.max(128, Number(maxTokens) || 0);
+    // await loadBase();
 
     const history = await chatService.getHistory();
     const recentMessages = history
       .slice(-5)
       .map(({ role, content }) => ({ role, content }));
 
-    let baseQuery = message;
-    if (ENABLE_REWRITE) {
-      baseQuery = await rewriteQuery(message);
-    }
-
-    let queries = [baseQuery];
-    if (ENABLE_EXPAND) {
-      queries = await expandQuery(baseQuery, expansions);
-    }
-
+    const expandedQueries = await expandQuery(message, expansions);
     let retrieved = [];
-    for (const q of queries) {
+    for (const q of expandedQueries) {
       const hits = await similaritySearchMongo(q, topK);
       retrieved.push(...hits);
     }
-
+    // Deduplicate by id, keep best score
     const byId = new Map();
     for (const hit of retrieved) {
       const prev = byId.get(hit.id);
       if (!prev || hit.score > prev.score) byId.set(hit.id, hit);
     }
     retrieved = Array.from(byId.values())
-      .filter((r) => r.score >= MIN_SCORE)
-      .sort((a, b) => b.score - a.score).filter((r) => r.score >= MIN_SCORE)
+      .sort((a, b) => b.score - a.score)
       .slice(0, topK);
 
-    if (ENABLE_RERANK) {
-      retrieved = await reorderChunksWithLLM(retrieved, queries[0]);
-      retrieved = retrieved.slice(0, RERANK_TOPK);
-    }
-
+    retrieved = await reorderChunksWithLLM(retrieved, expandedQueries[0]);
     const promptWithContext = buildSystemPrompt(systemPrompt, retrieved);
+
     const messages = [
       { role: "system", content: promptWithContext },
-      // ...recentMessages, // uncomment if you want convo history
+      // ...recentMessages, //uncomment to include recent messages in context
       { role: "user", content: message },
     ];
     await chatService.saveMessage("user", message);
@@ -453,14 +462,12 @@ export const ImpRAGService = {
         stream: false,
         options: {
           temperature,
-          num_predict: minPredict,
+          num_predict: maxTokens,
           top_p: topP,
         },
       });
 
       const content = response.data?.message?.content?.trim() || "";
-      // console.log("final answer",content);
-      
       await chatService.saveMessage("assistant", content);
 
       return { type: "text", message: content, contextUsed: retrieved };
@@ -471,8 +478,6 @@ export const ImpRAGService = {
   },
 };
 
-
-
 function keywordScore(query, text) {
   const q = query.toLowerCase().split(" ");
   const t = text.toLowerCase();
@@ -481,11 +486,6 @@ function keywordScore(query, text) {
 
   for (const word of q) {
     if (t.includes(word)) score += 1;
-  }
-
-  // 🔥 ONLY boost numbers if query expects numbers
-  if (/\d+|how many|percentage|amount|total/i.test(query) && /\d+/.test(t)) {
-    score += 2;
   }
 
   return score / q.length;
